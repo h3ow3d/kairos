@@ -1,0 +1,87 @@
+name: Build Kairos Node ISOs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'nodes/**'
+      - 'manifests/**'
+      - 'build/**'
+      - '.github/workflows/build-images.yml'
+      - 'README.md'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install YAML parser
+        run: pip3 install pyyaml
+
+      - name: Validate node YAML syntax
+        run: |
+          python3 - <<'PY'
+          import yaml
+          from pathlib import Path
+
+          root = Path('nodes')
+          files = sorted(root.glob('*.yaml'))
+          expected = {
+              'master-1.yaml', 'master-2.yaml', 'master-3.yaml',
+              'worker-1.yaml', 'worker-2.yaml', 'worker-3.yaml',
+              'data-1.yaml', 'data-2.yaml', 'data-3.yaml'
+          }
+
+          found = {p.name for p in files}
+          missing = expected - found
+          extra = found - expected
+
+          if missing:
+              raise SystemExit(f"Missing expected node config files: {sorted(missing)}")
+          if extra:
+              raise SystemExit(f"Unexpected node config files present: {sorted(extra)}")
+
+          for file in files:
+              with file.open() as f:
+                  yaml.safe_load(f)
+          print('All node YAML files are valid.')
+          PY
+
+      - name: Validate build script syntax
+        run: bash -n build/build.sh
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [master-1, master-2, master-3, worker-1, worker-2, worker-3, data-1, data-2, data-3]
+    env:
+      BASE_IMAGE: ghcr.io/kairos-io/kairos-k3s:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ISO for ${{ matrix.node }}
+        run: |
+          mkdir -p artifacts
+          docker run --rm \
+            -v "${{ github.workspace }}/nodes:/config" \
+            -v "${{ github.workspace }}/artifacts:/artifacts" \
+            quay.io/kairos/auroraboot:latest \
+            build-iso \
+            --cloud-config "/config/${{ matrix.node }}.yaml" \
+            --output /artifacts \
+            --override-name "${{ matrix.node }}.iso" \
+            "${BASE_IMAGE}"
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.node }}-iso
+          path: artifacts/${{ matrix.node }}.iso
+          retention-days: 30

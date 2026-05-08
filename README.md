@@ -1,90 +1,130 @@
 # Kairos k3s Lab Cluster (GNS3)
 
-Minimal repository layout for a Kairos-based **k3s** lab cluster in GNS3.
+This repository builds **9 bootable Kairos ISOs** for a k3s lab cluster in GNS3.
 
-## Layout
-
-- `cluster/` shared cluster settings
-- `nodes/` Kairos cloud-config files per node role
-- `manifests/` Kubernetes manifests to copy onto nodes
-- `gns3/` optional GNS3 project notes/exports
-
-## Cluster architecture (3/3/3)
-
-- 3 control-plane nodes (masters)
+- 3 control-plane nodes
 - 3 worker nodes
-- 3 data nodes (tainted for stateful workloads)
+- 3 data nodes
+- kube-vip API VIP: `10.0.0.100:6443` on `eth0`
 
+Lab-focused only (simple and minimal). Not production hardened.
+
+## Repository layout
+
+- `cluster/` shared cluster settings reference
+- `nodes/` per-node Kairos cloud-config files (one file per VM)
+- `manifests/` Kubernetes manifests (reference kube-vip manifest)
+- `build/` local build automation script
+- `.github/workflows/` GitHub Actions workflow to build ISOs
+- `artifacts/` local output directory for generated ISOs
+- `gns3/` optional GNS3 notes/exports
+
+## Node and IP plan
+
+All nodes are configured with static IPs in cloud-config:
+
+- `master-1` → `10.0.0.11`
+- `master-2` → `10.0.0.12`
+- `master-3` → `10.0.0.13`
+- `worker-1` → `10.0.0.21`
+- `worker-2` → `10.0.0.22`
+- `worker-3` → `10.0.0.23`
+- `data-1` → `10.0.0.31`
+- `data-2` → `10.0.0.32`
+- `data-3` → `10.0.0.33`
+
+Shared network settings:
+
+- Gateway: `10.0.0.1`
+- DNS: `10.0.0.1`
+- kube-vip VIP: `10.0.0.100`
+
+## What this repo produces
+
+- `master-1.iso`
+- `master-2.iso`
+- `master-3.iso`
+- `worker-1.iso`
+- `worker-2.iso`
+- `worker-3.iso`
+- `data-1.iso`
+- `data-2.iso`
+- `data-3.iso`
+
+Each ISO already embeds the node hostname, static IP configuration, and k3s join/init behavior.
+
+## Build with GitHub Actions
+
+Workflow file: `.github/workflows/build-images.yml`
+
+### Triggers
+
+- `workflow_dispatch` (manual run from Actions tab)
+- Pushes to `main` when `nodes/`, `manifests/`, `build/`, workflow file, or `README.md` change
+
+### What the workflow does
+
+1. Validates YAML syntax for all `nodes/*.yaml`
+2. Verifies all expected node config files exist
+3. Checks shell syntax of `build/build.sh`
+4. Builds one ISO per node using AuroraBoot
+5. Uploads each ISO as a separate artifact
+
+### Downloading artifacts
+
+1. Open GitHub **Actions**
+2. Open a successful **Build Kairos Node ISOs** run
+3. Download artifacts named:
+   - `master-1-iso`, `master-2-iso`, `master-3-iso`
+   - `worker-1-iso`, `worker-2-iso`, `worker-3-iso`
+   - `data-1-iso`, `data-2-iso`, `data-3-iso`
+
+## Build locally
+
+Run from repository root:
+
+```bash
+./build/build.sh
 ```
-                      +----------------------+
-                      |  kube-vip VIP        |
-                      |  10.0.0.100:6443     |
-                      +----------+-----------+
-                                 |
-              +------------------+------------------+
-              |                  |                  |
-         master-1            master-2           master-3
-        (init server)       (join server)      (join server)
-              |
-   +----------+-----------+
-   |                      |
- worker-1..3          data-1..3
-(node-role=worker)   (node-role=data, NoSchedule)
+
+Build a single node ISO:
+
+```bash
+./build/build.sh master-1
 ```
 
-## kube-vip HA behavior
+Local output is written to `artifacts/`.
 
-- kube-vip runs as a **static pod** on all master nodes.
-- It advertises API VIP `10.0.0.100` over L2 using **ARP mode** on `eth0`.
-- API clients and joining nodes always use `https://10.0.0.100:6443`.
-- If one master fails, VIP leadership moves to another master.
+Optional override for base image:
 
-## Boot flow
+```bash
+KAIROS_BASE_IMAGE=ghcr.io/kairos-io/kairos-k3s:latest ./build/build.sh master-1
+```
 
-1. Boot the first master with `nodes/master-init.yaml`.
-   - Installs k3s server with `--cluster-init`
-   - Applies master taint (`NoSchedule`)
-   - Writes kube-vip manifest to `/var/lib/rancher/k3s/server/manifests/kube-vip.yaml`
-2. Boot the other two masters with `nodes/master-join.yaml`.
-   - Join via VIP (`https://10.0.0.100:6443`)
-   - Use same token
-   - Also run kube-vip static pod
-3. Boot worker nodes with `nodes/worker.yaml`.
-   - Join as k3s agents
-   - Label: `node-role=worker`
-4. Boot data nodes with `nodes/data.yaml`.
-   - Join as k3s agents
-   - Label: `node-role=data`
-   - Taint: `node-role=data:NoSchedule`
+## GNS3 VM creation and boot order
 
-## Node config summary
+Create 9 VMs in GNS3 and attach the matching ISO to each VM.
 
-- Token: `super-secret-token`
-- VIP: `10.0.0.100`
-- API port: `6443`
-- Interface: `eth0`
-- k3s install method: official script `https://get.k3s.io`
+Recommended boot order:
 
-## Using these configs in Kairos
+1. Boot `master-1` first
+2. Wait until k3s is up and VIP `10.0.0.100` is reachable
+3. Boot `master-2` and `master-3`
+4. Boot all workers and data nodes
 
-Apply one cloud-config file per VM instance:
+## Cluster verification
 
-- `nodes/master-init.yaml` for exactly one bootstrap master
-- `nodes/master-join.yaml` for the remaining masters
-- `nodes/worker.yaml` for worker VMs
-- `nodes/data.yaml` for data VMs
-
-After boot, verify from a master:
+From a control-plane node:
 
 ```bash
 kubectl get nodes -o wide
-kubectl get pods -n kube-system -l name=kube-vip
+kubectl get pods -A
+kubectl get endpoints kubernetes
+ping 10.0.0.100
 ```
 
-For manual/static pod reuse, `manifests/kube-vip.yaml` contains the same kube-vip definition expected at:
+## Notes
 
-`/var/lib/rancher/k3s/server/manifests/kube-vip.yaml`
-
----
-
-Lab-focused only (simple and minimal). Not production hardened.
+- `super-secret-token` is hardcoded for lab convenience only.
+- For real environments, rotate secrets and apply production hardening.
+- `manifests/kube-vip.yaml` is kept as a standalone reference copy.
