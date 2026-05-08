@@ -60,7 +60,7 @@ build_node() {
     build-iso \
     --cloud-config "/config/$node.yaml" \
     --output /artifacts \
-    --override-name "$node.iso" \
+    --override-name "$node" \
     "$BASE_IMAGE"
 
   if [[ ! -f "$iso" ]]; then

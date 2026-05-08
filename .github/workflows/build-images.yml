@@ -114,7 +114,7 @@ jobs:
             build-iso \
             --cloud-config "/config/${NODE}.yaml" \
             --output /artifacts \
-            --override-name "${NODE}.iso" \
+            --override-name "${NODE}" \
             "${BASE_IMAGE}"
 
           echo "===== DEBUG: post-build artifacts ====="
