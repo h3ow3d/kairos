@@ -1,0 +1,18 @@
+#cloud-config
+hostname: worker-3
+stages:
+  boot:
+    - commands:
+        - |
+          cat > /etc/systemd/network/10-eth0.network <<'NETCONF'
+          [Match]
+          Name=eth0
+
+          [Network]
+          Address=10.0.0.23/24
+          Gateway=10.0.0.1
+          DNS=10.0.0.1
+          NETCONF
+          systemctl restart systemd-networkd || true
+        - |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="agent --node-label node-role=worker" K3S_URL="https://10.0.0.100:6443" K3S_TOKEN="super-secret-token" sh -

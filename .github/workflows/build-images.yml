@@ -1,0 +1,102 @@
+name: Build Kairos Node ISOs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'nodes/**'
+      - 'manifests/**'
+      - 'build/**'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: "Pinned Kairos k3s-capable source image (e.g. ghcr.io/...:vX.Y.Z)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install YAML parser
+        run: pip3 install pyyaml
+
+      - name: Validate node YAML syntax
+        run: |
+          python3 - <<'PY'
+          import yaml
+          from pathlib import Path
+
+          root = Path('nodes')
+          files = sorted(root.glob('*.yaml'))
+          expected = {
+              'master-1.yaml', 'master-2.yaml', 'master-3.yaml',
+              'worker-1.yaml', 'worker-2.yaml', 'worker-3.yaml',
+              'data-1.yaml', 'data-2.yaml', 'data-3.yaml'
+          }
+
+          found = {p.name for p in files}
+          missing = expected - found
+          extra = found - expected
+
+          if missing:
+              raise SystemExit(f"Missing expected node config files: {sorted(missing)}")
+          if extra:
+              raise SystemExit(f"Unexpected node config files present: {sorted(extra)}")
+
+          for file in files:
+              with file.open() as f:
+                  yaml.safe_load(f)
+          print('All node YAML files are valid.')
+          PY
+
+      - name: Validate build script syntax
+        run: bash -n build/build.sh
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [master-1, master-2, master-3, worker-1, worker-2, worker-3, data-1, data-2, data-3]
+    env:
+      BASE_IMAGE: ${{ github.event.inputs.base_image || vars.KAIROS_BASE_IMAGE }}
+      # AuroraBoot image digest pinned from quay.io/kairos/auroraboot:latest (resolved 2026-05-08)
+      AURORABOOT_IMAGE: quay.io/kairos/auroraboot@sha256:780e9884a1ac6dc41d03c48e010a2a3d2cb2d2bcd197215b420618dbdd4fca63
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure base image is configured
+        run: |
+          if [ -z "${BASE_IMAGE}" ]; then
+            echo "Set repository variable KAIROS_BASE_IMAGE or provide workflow_dispatch input base_image." >&2
+            exit 1
+          fi
+
+      - name: Build ISO for ${{ matrix.node }}
+        run: |
+          mkdir -p artifacts
+          docker run --rm \
+            -v "${{ github.workspace }}/nodes:/config" \
+            -v "${{ github.workspace }}/artifacts:/artifacts" \
+            "${AURORABOOT_IMAGE}" \
+            build-iso \
+            --cloud-config "/config/${{ matrix.node }}.yaml" \
+            --output /artifacts \
+            --override-name "${{ matrix.node }}.iso" \
+            "${BASE_IMAGE}"
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.node }}-iso
+          path: artifacts/${{ matrix.node }}.iso
+          retention-days: 30
