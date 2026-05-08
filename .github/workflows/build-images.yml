@@ -84,19 +84,63 @@ jobs:
       - name: Build ISO for ${{ matrix.node }}
         run: |
           mkdir -p artifacts
+          NODE="${{ matrix.node }}"
+          EXPECTED_ISO="artifacts/${NODE}.iso"
+
+          echo "===== DEBUG: pre-build context ====="
+          echo "pwd: $(pwd)"
+          echo "selected node: ${NODE}"
+          echo "expected output path: ${EXPECTED_ISO}"
+          echo "BASE_IMAGE: ${BASE_IMAGE}"
+          echo "AURORABOOT_IMAGE: ${AURORABOOT_IMAGE}"
+          echo "repo root listing:"
+          ls -lah .
+          echo "nodes/ listing:"
+          ls -lah nodes
+          echo "artifacts/ listing (if exists):"
+          if [ -d artifacts ]; then
+            ls -lah artifacts
+          else
+            echo "artifacts directory does not exist"
+          fi
+          echo "docker mount: ${{ github.workspace }}/nodes:/config"
+          echo "docker mount: ${{ github.workspace }}/artifacts:/artifacts"
+          echo "===== DEBUG: end pre-build context ====="
+
           docker run --rm \
             -v "${{ github.workspace }}/nodes:/config" \
             -v "${{ github.workspace }}/artifacts:/artifacts" \
             "${AURORABOOT_IMAGE}" \
             build-iso \
-            --cloud-config "/config/${{ matrix.node }}.yaml" \
+            --cloud-config "/config/${NODE}.yaml" \
             --output /artifacts \
-            --override-name "${{ matrix.node }}.iso" \
+            --override-name "${NODE}.iso" \
             "${BASE_IMAGE}"
+
+          echo "===== DEBUG: post-build artifacts ====="
+          if [ -d artifacts ]; then
+            find artifacts -maxdepth 4 -print
+            find artifacts -maxdepth 4 -type f -ls
+            du -ah artifacts || true
+            ls -lah artifacts || true
+          else
+            echo "artifacts directory does not exist after build"
+          fi
+          echo "===== DEBUG: post-build image discovery ====="
+          find . \( -name "*.iso" -o -name "*.img" -o -name "*.qcow2" \)
+          echo "===== DEBUG: end post-build ====="
+
+          if [ ! -f "${EXPECTED_ISO}" ]; then
+            echo "Expected ISO was not found: ${EXPECTED_ISO}" >&2
+            echo "Available files:" >&2
+            find artifacts -maxdepth 4 -type f -print >&2 || true
+            exit 1
+          fi
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-iso
           path: artifacts/${{ matrix.node }}.iso
+          if-no-files-found: error
           retention-days: 30
