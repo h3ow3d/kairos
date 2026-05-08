@@ -70,6 +70,11 @@ Workflow file: `.github/workflows/build-images.yml`
 4. Builds one ISO per node using AuroraBoot
 5. Uploads each ISO as a separate artifact
 
+Before running builds, set one of:
+
+- repository variable `KAIROS_BASE_IMAGE` (used for push-triggered runs), or
+- `workflow_dispatch` input `base_image` (used for manual runs)
+
 ### Downloading artifacts
 
 1. Open GitHub **Actions**
@@ -95,10 +100,10 @@ Build a single node ISO:
 
 Local output is written to `artifacts/`.
 
-Optional override for base image:
+Required base image override:
 
 ```bash
-KAIROS_BASE_IMAGE=ghcr.io/kairos-io/kairos-k3s:latest ./build/build.sh master-1
+KAIROS_BASE_IMAGE=ghcr.io/kairos-io/kairos-k3s:<pinned-tag> ./build/build.sh master-1
 ```
 
 ## GNS3 VM creation and boot order

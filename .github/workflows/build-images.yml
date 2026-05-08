@@ -10,6 +10,13 @@ on:
       - '.github/workflows/build-images.yml'
       - 'README.md'
   workflow_dispatch:
+    inputs:
+      base_image:
+        description: "Pinned Kairos k3s-capable source image (e.g. ghcr.io/...:vX.Y.Z)"
+        required: false
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -61,10 +68,18 @@ jobs:
       matrix:
         node: [master-1, master-2, master-3, worker-1, worker-2, worker-3, data-1, data-2, data-3]
     env:
-      BASE_IMAGE: ghcr.io/kairos-io/kairos-k3s:latest
+      BASE_IMAGE: ${{ github.event.inputs.base_image || vars.KAIROS_BASE_IMAGE }}
+      AURORABOOT_IMAGE: quay.io/kairos/auroraboot@sha256:780e9884a1ac6dc41d03c48e010a2a3d2cb2d2bcd197215b420618dbdd4fca63
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Ensure base image is configured
+        run: |
+          if [ -z "${BASE_IMAGE}" ]; then
+            echo "Set repository variable KAIROS_BASE_IMAGE or provide workflow_dispatch input base_image." >&2
+            exit 1
+          fi
 
       - name: Build ISO for ${{ matrix.node }}
         run: |
@@ -72,7 +87,7 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}/nodes:/config" \
             -v "${{ github.workspace }}/artifacts:/artifacts" \
-            quay.io/kairos/auroraboot:latest \
+            "${AURORABOOT_IMAGE}" \
             build-iso \
             --cloud-config "/config/${{ matrix.node }}.yaml" \
             --output /artifacts \

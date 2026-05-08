@@ -5,8 +5,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODES_DIR="$REPO_ROOT/nodes"
 ARTIFACTS_DIR="$REPO_ROOT/artifacts"
 
-AURORABOOT_IMAGE="quay.io/kairos/auroraboot:latest"
-BASE_IMAGE="${KAIROS_BASE_IMAGE:-ghcr.io/kairos-io/kairos-k3s:latest}"
+AURORABOOT_IMAGE="quay.io/kairos/auroraboot@sha256:780e9884a1ac6dc41d03c48e010a2a3d2cb2d2bcd197215b420618dbdd4fca63"
+BASE_IMAGE="${KAIROS_BASE_IMAGE:-}"
 
 NODES=(
   master-1
@@ -36,6 +36,11 @@ if [[ $# -gt 1 ]]; then
 fi
 
 mkdir -p "$ARTIFACTS_DIR"
+
+if [[ -z "$BASE_IMAGE" ]]; then
+  echo "Set KAIROS_BASE_IMAGE to a pinned Kairos k3s-capable source image before building." >&2
+  exit 1
+fi
 
 build_node() {
   local node="$1"
