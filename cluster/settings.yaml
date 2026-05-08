@@ -1,0 +1,8 @@
+vip: 10.0.0.100
+api_port: 6443
+token: super-secret-token
+interface: eth0
+nodes:
+  masters: 3
+  workers: 3
+  data: 3
