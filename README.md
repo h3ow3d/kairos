@@ -131,5 +131,6 @@ ping 10.0.0.100
 ## Notes
 
 - `super-secret-token` is hardcoded for lab convenience only.
+- If you reuse this repository outside a disposable lab, replace the token in all node cloud-config files before building images.
 - For real environments, rotate secrets and apply production hardening.
 - `manifests/kube-vip.yaml` is kept as a standalone reference copy.

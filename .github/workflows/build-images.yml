@@ -69,6 +69,7 @@ jobs:
         node: [master-1, master-2, master-3, worker-1, worker-2, worker-3, data-1, data-2, data-3]
     env:
       BASE_IMAGE: ${{ github.event.inputs.base_image || vars.KAIROS_BASE_IMAGE }}
+      # AuroraBoot image digest pinned from quay.io/kairos/auroraboot:latest (resolved 2026-05-08)
       AURORABOOT_IMAGE: quay.io/kairos/auroraboot@sha256:780e9884a1ac6dc41d03c48e010a2a3d2cb2d2bcd197215b420618dbdd4fca63
     steps:
       - name: Checkout
