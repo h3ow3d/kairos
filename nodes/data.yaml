@@ -1,0 +1,7 @@
+#cloud-config
+hostname: data
+stages:
+  boot:
+    - commands:
+        - |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="agent --node-label node-role=data --node-taint node-role=data:NoSchedule" K3S_URL="https://10.0.0.100:6443" K3S_TOKEN="super-secret-token" sh -
